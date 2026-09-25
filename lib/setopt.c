@@ -1747,6 +1747,11 @@ static CURLcode setopt_cptr_proxy(struct Curl_easy *data, CURLoption option,
      * clearing this option also switch off a header that the application
      * asked for with CURLOPT_HAPROXYPROTOCOL.
      */
+    if(ptr && !*ptr)
+      /* An empty address leaves the address fields of the header empty, which
+         makes the whole header syntactically invalid. Use NULL to not send an
+         address. */
+      return CURLE_BAD_FUNCTION_ARGUMENT;
     result = Curl_setstropt(data, STRING_HAPROXY_CLIENT_IP, ptr);
     break;
   case CURLOPT_PROXY_CAINFO:

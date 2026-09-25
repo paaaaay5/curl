@@ -48,6 +48,9 @@ option.
 
 As with most libcurl options, the user of this option must make sure that the
 *correct* data (address) is passed on. libcurl does little to no verification.
+An empty string is refused with CURLE_BAD_FUNCTION_ARGUMENT, since that would
+leave the address fields of the header empty and make the header invalid. Use
+NULL to send no address.
 
 Note that if you want to send a *different* HAProxy client IP in a subsequent
 request, you need to make sure that it is done over a fresh connection as
