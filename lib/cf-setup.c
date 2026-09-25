@@ -63,7 +63,10 @@ static CURLcode cf_setup_add_haproxy(struct Curl_cfilter *cf,
   CURLcode result = CURLE_OK;
 
   if(ctx->state < CF_SETUP_CNNCT_HAPROXY) {
-    if(data->set.haproxyprotocol) {
+    /* CURLOPT_HAPROXY_CLIENT_IP asks for the header on its own, it is an
+       alternative to CURLOPT_HAPROXYPROTOCOL for picking the address */
+    if(data->set.haproxyprotocol ||
+       CURL_EASY_STR(data, STRING_HAPROXY_CLIENT_IP)) {
       if(ctx->transport == TRNSPRT_QUIC) {
         failf(data, "haproxy protocol does not support QUIC");
         return CURLE_UNSUPPORTED_PROTOCOL;

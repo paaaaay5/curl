@@ -5,6 +5,7 @@ Title: CURLOPT_HAPROXYPROTOCOL
 Section: 3
 Source: libcurl
 See-also:
+  - CURLOPT_HAPROXY_CLIENT_IP (3)
   - CURLOPT_PROXY (3)
 Protocol:
   - All
@@ -32,6 +33,10 @@ send this header.
 
 This option is primarily useful when sending test requests to a service that
 expects this header.
+
+CURLOPT_HAPROXY_CLIENT_IP(3) also makes libcurl send this header, so setting
+this option to 0 does not stop the header from being sent while a client IP is
+set. Switch off both options to send no header at all.
 
 Note that the HAProxy protocol message is only is sent over a freshly setup
 connection. A subsequent transfer that reuses a previous connection does not

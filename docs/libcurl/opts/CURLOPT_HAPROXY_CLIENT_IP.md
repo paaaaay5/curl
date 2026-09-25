@@ -35,10 +35,13 @@ The client address is reported upstream as the source *and* destination address
 of the non-existing client connection (since 8.20.0).
 
 This option is an alternative to CURLOPT_HAPROXYPROTOCOL(3) as that one cannot
-use a specified address.
+use a specified address. Setting an address makes libcurl send the header even
+when CURLOPT_HAPROXYPROTOCOL(3) is not used.
 
 Using this option multiple times makes the last set string override the
-previous ones. Set it to NULL to disable its use again.
+previous ones. Set it to NULL to disable its use again. Note that this only
+stops libcurl from using the address: a header that CURLOPT_HAPROXYPROTOCOL(3)
+asks for is still sent. Switch off both options to send no header at all.
 
 The application does not have to keep the string around after setting this
 option.

@@ -1741,11 +1741,13 @@ static CURLcode setopt_cptr_proxy(struct Curl_easy *data, CURLoption option,
   case CURLOPT_HAPROXY_CLIENT_IP:
     /*
      * Set the client IP to send through HAProxy PROXY protocol
+     *
+     * Setting an address implies sending the header, but that is decided when
+     * the connection is set up. Assigning 'haproxyprotocol' here would make
+     * clearing this option also switch off a header that the application
+     * asked for with CURLOPT_HAPROXYPROTOCOL.
      */
     result = Curl_setstropt(data, STRING_HAPROXY_CLIENT_IP, ptr);
-
-    /* enable the HAProxy protocol if an IP is provided */
-    s->haproxyprotocol = !!CURL_EASY_STR(data, STRING_HAPROXY_CLIENT_IP);
     break;
   case CURLOPT_PROXY_CAINFO:
     /*
