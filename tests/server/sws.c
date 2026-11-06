@@ -314,16 +314,65 @@ static int sws_parse_servercmd(struct sws_httprequest *req)
   return 0; /* OK! */
 }
 
+/* Detect a PROXY protocol version 2 header at the start of the request.
+
+   The v2 header is binary and starts with bytes that are identical to the
+   end-of-headers marker, so it must be identified and skipped before the
+   string based request parsing below can work.
+
+   Stores the header length in *plen, zero when there is no v2 header. Returns
+   TRUE when the answer is final, FALSE when a v2 header has been started but
+   has not arrived in full yet. */
+static bool sws_haproxy_v2_len(const struct sws_httprequest *req,
+                               size_t *plen)
+{
+  static const unsigned char sig[12] = {
+    0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A
+  };
+  const unsigned char *buf = (const unsigned char *)req->reqbuf;
+  size_t alen;
+
+  *plen = 0;
+  if(req->offset < sizeof(sig)) {
+    /* if what we have so far matches the signature, more may be coming */
+    return memcmp(buf, sig, req->offset) ? TRUE : FALSE;
+  }
+  if(memcmp(buf, sig, sizeof(sig)))
+    return TRUE; /* not a v2 header */
+  if(req->offset < 16)
+    return FALSE; /* need the full fixed part */
+  if((buf[12] & 0xF0) != 0x20)
+    return TRUE; /* not protocol version 2 */
+  alen = ((size_t)buf[14] << 8) | (size_t)buf[15];
+  if(req->offset < 16 + alen)
+    return FALSE; /* address block not complete */
+  *plen = 16 + alen;
+  return TRUE;
+}
+
 static int sws_ProcessRequest(struct sws_httprequest *req)
 {
-  const char *line = &req->reqbuf[req->checkindex];
+  const char *line;
   bool chunked = FALSE;
   static char request[REQUEST_KEYWORD_SIZE];
   int prot_major = 0;
   int prot_minor = 0;
-  const char *end = strstr(line, end_of_headers);
+  const char *end;
   const char *pval;
   curl_off_t num;
+
+  if(!req->checkindex) {
+    size_t hlen;
+    if(!sws_haproxy_v2_len(req, &hlen))
+      return 0; /* PROXY protocol v2 header not complete yet */
+    if(hlen) {
+      logmsg("Skipping %zu bytes of PROXY protocol v2 header", hlen);
+      req->checkindex = hlen;
+    }
+  }
+
+  line = &req->reqbuf[req->checkindex];
+  end = strstr(line, end_of_headers);
 
   req->callcount++;
 

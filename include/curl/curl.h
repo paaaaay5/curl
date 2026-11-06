@@ -2288,8 +2288,19 @@ typedef enum {
   /* Space-separated list of components to sign for HTTP Message Signatures */
   CURLOPT(CURLOPT_HTTPSIG_HEADERS, CURLOPTTYPE_STRINGPOINT, 332),
 
+  /* UNIX socket path to send as the client address in a HAProxy PROXY
+     protocol v2 header (AF_UNIX) */
+  CURLOPT(CURLOPT_HAPROXY_CLIENT_PATH, CURLOPTTYPE_STRINGPOINT, 333),
+
   CURLOPT_LASTENTRY /* the last unused */
 } CURLoption;
+
+/* Values for CURLOPT_HAPROXYPROTOCOL, selecting which version of the HAProxy
+   PROXY protocol header to send. The versions are mutually exclusive, so this
+   is a single value and not a bitmask. Zero disables the header. Version 1 is
+   value 1, which is what the option has always accepted. */
+#define CURLHAPROXY_V1 1 /* send the version 1 (human readable) header */
+#define CURLHAPROXY_V2 2 /* send the version 2 (binary) header */
 
 #ifndef CURL_NO_OLDIES /* define this to test if your app builds with all
                           the obsolete stuff removed! */

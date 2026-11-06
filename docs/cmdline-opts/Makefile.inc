@@ -120,7 +120,9 @@ DPAGES = \
   globoff.md \
   happy-eyeballs-timeout-ms.md \
   haproxy-protocol.md \
+  haproxy-protocol-v2.md \
   haproxy-clientip.md \
+  haproxy-clientpath.md \
   head.md \
   header.md \
   help.md \

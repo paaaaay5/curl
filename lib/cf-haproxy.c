@@ -30,6 +30,7 @@
 #include "cf-haproxy.h"
 #include "connect.h"
 #include "curl_addrinfo.h"
+#include "curlx/inet_pton.h"
 #include "curl_trc.h"
 #include "select.h"
 
@@ -53,6 +54,123 @@ static void cf_haproxy_ctx_free(struct cf_haproxy_ctx *ctx)
   }
 }
 
+/* The 12 byte protocol signature that starts every PROXY protocol v2
+   header. */
+static const unsigned char haproxy_v2_sig[12] = {
+  0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D,
+  0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A
+};
+
+/* Append a PROXY protocol v2 header carrying the client's source and
+   destination addresses and ports. Unlike v1, this is a binary format, so we
+   convert the textual addresses back into their network representation and
+   pass on the real endpoints (rather than UNSPEC), matching the intent of the
+   protocol. */
+static CURLcode cf_haproxy_v2_addr(struct dynbuf *out,
+                                   bool is_ipv6,
+                                   const char *src_ip,
+                                   const char *dst_ip,
+                                   unsigned short src_port,
+                                   unsigned short dst_port)
+{
+  unsigned char hdr[16 + 36]; /* fixed 16 bytes + at most an IPv6 block (36) */
+  unsigned char *p = hdr;
+  size_t addrlen;
+
+  memcpy(p, haproxy_v2_sig, sizeof(haproxy_v2_sig));
+  p += sizeof(haproxy_v2_sig);
+  *p++ = 0x21; /* protocol version 2 (0x20) | PROXY command (0x01) */
+
+  if(is_ipv6) {
+    unsigned char saddr[16];
+    unsigned char daddr[16];
+    if((curlx_inet_pton(AF_INET6, src_ip, saddr) != 1) ||
+       (curlx_inet_pton(AF_INET6, dst_ip, daddr) != 1))
+      return CURLE_COULDNT_CONNECT;
+    *p++ = 0x21; /* AF_INET6 (0x20) | STREAM (0x01) */
+    addrlen = 16 + 16 + 2 + 2;
+    *p++ = (unsigned char)((addrlen >> 8) & 0xff);
+    *p++ = (unsigned char)(addrlen & 0xff);
+    memcpy(p, saddr, 16);
+    p += 16;
+    memcpy(p, daddr, 16);
+    p += 16;
+  }
+  else {
+    unsigned char saddr[4];
+    unsigned char daddr[4];
+    if((curlx_inet_pton(AF_INET, src_ip, saddr) != 1) ||
+       (curlx_inet_pton(AF_INET, dst_ip, daddr) != 1))
+      return CURLE_COULDNT_CONNECT;
+    *p++ = 0x11; /* AF_INET (0x10) | STREAM (0x01) */
+    addrlen = 4 + 4 + 2 + 2;
+    *p++ = (unsigned char)((addrlen >> 8) & 0xff);
+    *p++ = (unsigned char)(addrlen & 0xff);
+    memcpy(p, saddr, 4);
+    p += 4;
+    memcpy(p, daddr, 4);
+    p += 4;
+  }
+
+  /* source and destination ports, in network byte order */
+  *p++ = (unsigned char)((src_port >> 8) & 0xff);
+  *p++ = (unsigned char)(src_port & 0xff);
+  *p++ = (unsigned char)((dst_port >> 8) & 0xff);
+  *p++ = (unsigned char)(dst_port & 0xff);
+
+  return curlx_dyn_addn(out, hdr, (size_t)(p - hdr));
+}
+
+/* Append a PROXY protocol v2 LOCAL header with no address information. Used
+   when we cannot report meaningful addresses (e.g. over a Unix domain
+   socket), mirroring the "PROXY UNKNOWN" case of version 1. */
+#ifdef USE_UNIX_SOCKETS
+static CURLcode cf_haproxy_v2_local(struct dynbuf *out)
+{
+  unsigned char hdr[16];
+  memcpy(hdr, haproxy_v2_sig, sizeof(haproxy_v2_sig));
+  hdr[12] = 0x20; /* protocol version 2 (0x20) | LOCAL command (0x00) */
+  hdr[13] = 0x00; /* AF_UNSPEC | UNSPEC transport */
+  hdr[14] = 0x00; /* address length high byte */
+  hdr[15] = 0x00; /* address length low byte */
+  return curlx_dyn_addn(out, hdr, sizeof(hdr));
+}
+#endif /* USE_UNIX_SOCKETS */
+
+/* Maximum length of a PROXY protocol v2 AF_UNIX address field. */
+#define HAPROXY_V2_UNIX_PATH_LEN 108
+
+/* Append a PROXY protocol v2 header for the AF_UNIX address family, carrying
+   the given source and destination socket paths. Each path occupies a fixed
+   108 byte, NUL-padded field. */
+static CURLcode cf_haproxy_v2_unix(struct dynbuf *out,
+                                   const char *src_path,
+                                   const char *dst_path)
+{
+  unsigned char hdr[16 + 2 * HAPROXY_V2_UNIX_PATH_LEN];
+  unsigned char *p = hdr;
+  size_t slen = strlen(src_path);
+  size_t dlen = strlen(dst_path);
+  size_t addrlen = 2 * HAPROXY_V2_UNIX_PATH_LEN;
+
+  if((slen > HAPROXY_V2_UNIX_PATH_LEN) || (dlen > HAPROXY_V2_UNIX_PATH_LEN))
+    /* the path does not fit the fixed-size address field */
+    return CURLE_BAD_FUNCTION_ARGUMENT;
+
+  memcpy(p, haproxy_v2_sig, sizeof(haproxy_v2_sig));
+  p += sizeof(haproxy_v2_sig);
+  *p++ = 0x21; /* protocol version 2 (0x20) | PROXY command (0x01) */
+  *p++ = 0x31; /* AF_UNIX (0x30) | STREAM (0x01) */
+  *p++ = (unsigned char)((addrlen >> 8) & 0xff);
+  *p++ = (unsigned char)(addrlen & 0xff);
+  memset(p, 0, addrlen);
+  memcpy(p, src_path, slen);
+  memcpy(p + HAPROXY_V2_UNIX_PATH_LEN, dst_path, dlen);
+  p += addrlen;
+
+  return curlx_dyn_addn(out, hdr, (size_t)(p - hdr));
+}
+
 static CURLcode cf_haproxy_date_out_set(struct Curl_cfilter *cf,
                                         struct Curl_easy *data)
 {
@@ -62,43 +180,78 @@ static CURLcode cf_haproxy_date_out_set(struct Curl_cfilter *cf,
    * addresses: either the ones used to talk to the upstream
    *            OR the value supplied by the user
    * ports: the ports used in the upstream connection */
-  const char *client_source_ip;
-  const char *client_dest_ip;
   struct cf_haproxy_ctx *ctx = cf->ctx;
   CURLcode result;
   struct ip_quadruple ipquad;
   bool is_ipv6;
+  bool v2 = (data->set.haproxyprotocol == CURLHAPROXY_V2);
+  const char *client_ip = CURL_EASY_STR(data, STRING_HAPROXY_CLIENT_IP);
+  const char *client_path = CURL_EASY_STR(data, STRING_HAPROXY_CLIENT_PATH);
 
   DEBUGASSERT(ctx);
   DEBUGASSERT(ctx->state == HAPROXY_INIT);
+
+  /* A user-supplied UNIX socket path is reported using the AF_UNIX address
+     family, which only exists in the version 2 header. */
+  if(v2 && client_path)
+    return cf_haproxy_v2_unix(&ctx->data_out, client_path, client_path);
+
+  /* A user-supplied client IP is reported regardless of the actual transport,
+     so it works for a real Unix socket connection too. The ports of such a
+     connection are not available, so zero is used for them. */
+  if(client_ip) {
+    is_ipv6 = !Curl_is_ipv4addr(client_ip);
 #ifdef USE_UNIX_SOCKETS
-  if(Curl_conn_get_first_peer(cf->conn, cf->sockindex)->unix_socket)
-    /* the buffer is large enough to hold this! */
-    result = curlx_dyn_addn(&ctx->data_out, STRCONST("PROXY UNKNOWN\r\n"));
-  else {
+    if(Curl_conn_get_first_peer(cf->conn, cf->sockindex)->unix_socket) {
+      if(v2)
+        return cf_haproxy_v2_addr(&ctx->data_out, is_ipv6,
+                                  client_ip, client_ip, 0, 0);
+      return curlx_dyn_addf(&ctx->data_out, "PROXY %s %s %s 0 0\r\n",
+                            is_ipv6 ? "TCP6" : "TCP4", client_ip, client_ip);
+    }
 #endif /* USE_UNIX_SOCKETS */
+  }
+
+#ifdef USE_UNIX_SOCKETS
+  else if(Curl_conn_get_first_peer(cf->conn, cf->sockindex)->unix_socket) {
+    /* A real Unix socket connection with no spoofed address has no client
+       address to report. */
+    if(v2)
+      return cf_haproxy_v2_local(&ctx->data_out);
+    return curlx_dyn_addn(&ctx->data_out, STRCONST("PROXY UNKNOWN\r\n"));
+  }
+#endif /* USE_UNIX_SOCKETS */
+
+  /* A real TCP connection: report the actual endpoints, or the spoofed client
+     IP with the real ports. */
   result = Curl_conn_cf_get_ip_info(cf->next, data, &is_ipv6, &ipquad);
   if(result)
     return result;
 
-  client_source_ip = CURL_EASY_STR(data, STRING_HAPROXY_CLIENT_IP);
-  if(client_source_ip) {
-    client_dest_ip = client_source_ip;
-    is_ipv6 = !Curl_is_ipv4addr(client_source_ip);
+  if(!client_ip) {
+    client_ip = ipquad.local_ip;
+    if(v2)
+      result = cf_haproxy_v2_addr(&ctx->data_out, is_ipv6,
+                                  ipquad.local_ip, ipquad.remote_ip,
+                                  ipquad.local_port, ipquad.remote_port);
+    else
+      result = curlx_dyn_addf(&ctx->data_out, "PROXY %s %s %s %d %d\r\n",
+                              is_ipv6 ? "TCP6" : "TCP4",
+                              ipquad.local_ip, ipquad.remote_ip,
+                              ipquad.local_port, ipquad.remote_port);
   }
   else {
-    client_source_ip = ipquad.local_ip;
-    client_dest_ip = ipquad.remote_ip;
+    is_ipv6 = !Curl_is_ipv4addr(client_ip);
+    if(v2)
+      result = cf_haproxy_v2_addr(&ctx->data_out, is_ipv6,
+                                  client_ip, client_ip,
+                                  ipquad.local_port, ipquad.remote_port);
+    else
+      result = curlx_dyn_addf(&ctx->data_out, "PROXY %s %s %s %d %d\r\n",
+                              is_ipv6 ? "TCP6" : "TCP4",
+                              client_ip, client_ip,
+                              ipquad.local_port, ipquad.remote_port);
   }
-
-  result = curlx_dyn_addf(&ctx->data_out, "PROXY %s %s %s %d %d\r\n",
-                          is_ipv6 ? "TCP6" : "TCP4",
-                          client_source_ip, client_dest_ip,
-                          ipquad.local_port, ipquad.remote_port);
-
-#ifdef USE_UNIX_SOCKETS
-  }
-#endif /* USE_UNIX_SOCKETS */
   return result;
 }
 

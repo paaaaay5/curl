@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="US-ASCII"?>
+<testcase>
+<info>
+<keywords>
+HTTP
+HTTP GET
+proxy
+haproxy
+UnixSockets
+</keywords>
+</info>
+
+# Server-side
+<reply>
+<data nocheck="yes">
+HTTP/1.1 200 OK
+Date: Tue, 09 Nov 2010 14:49:00 GMT
+Server: test-server/fake
+Content-Length: 6
+Connection: close
+Content-Type: text/html
+
+-foo-
+</data>
+</reply>
+
+# Client-side
+<client>
+<features>
+proxy
+UnixSockets
+</features>
+<server>
+http-unix
+</server>
+<name>
+HTTP GET over Unix socket with PROXY protocol v2
+</name>
+<command>
+--unix-socket %HTTPUNIXPATH http://%HOSTIP/%TESTNUMBER --haproxy-protocol-v2 -H "Testno: %TESTNUMBER"
+</command>
+</client>
+
+# Verify data after the test has been "shot"
+#
+# Over a Unix domain socket there are no meaningful addresses to report, so a
+# v2 LOCAL header without an address block is sent. That header is a fixed
+# sequence of 16 bytes, which makes it possible to compare it verbatim.
+#
+# The binary header and the request line end up on the same line, so the CR of
+# that line is spelled out here instead of relying on crlf="headers".
+<verify>
+<protocol crlf="headers">
+%hex[%0D%0A%0D%0A%00%0D%0A%51%55%49%54%0A%20%00%00%00]hex%GET /%TESTNUMBER HTTP/1.1%hex[%0D]hex%
+Host: %HOSTIP
+User-Agent: curl/%VERSION
+Accept: */*
+Testno: %TESTNUMBER
+
+</protocol>
+</verify>
+</testcase>

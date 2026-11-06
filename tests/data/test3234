@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="US-ASCII"?>
+<testcase>
+<info>
+<keywords>
+HTTP
+HTTP GET
+proxy
+haproxy
+</keywords>
+</info>
+
+# Server-side
+<reply>
+<data nocheck="yes">
+HTTP/1.1 200 OK
+Date: Tue, 09 Nov 2010 14:49:00 GMT
+Server: test-server/fake
+Content-Length: 6
+Connection: close
+Content-Type: text/html
+
+-foo-
+</data>
+</reply>
+
+# Client-side
+<client>
+<server>
+http
+</server>
+<name>
+HTTP GET with PROXY protocol v2 (binary header, TCP over IPv4)
+</name>
+<command>
+http://%HOSTIP:%HTTPPORT/%TESTNUMBER --haproxy-protocol-v2 -H "Testno: %TESTNUMBER"
+</command>
+<features>
+proxy
+</features>
+</client>
+
+# Verify data after the test has been "shot"
+#
+# The v2 header is binary and carries a random source port, so it cannot be
+# compared verbatim here. The postcheck parses the received bytes and
+# validates the signature, the version/command byte, the address family, the
+# address block length, both addresses, the ports and that the HTTP request
+# directly follows the header.
+<verify>
+<postcheck>
+%PERL %SRCDIR/test3234.pl %LOGDIR/server.input tcp4 src=%CLIENTIP dst=%HOSTIP sport=nonzero dport=%HTTPPORT req=%TESTNUMBER
+</postcheck>
+</verify>
+</testcase>

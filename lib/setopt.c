@@ -512,12 +512,6 @@ static CURLcode setopt_long_bool(struct Curl_easy *data, CURLoption option,
      */
     s->tunnel_thru_httpproxy = enabled;
     break;
-  case CURLOPT_HAPROXYPROTOCOL:
-    /*
-     * Set to send the HAProxy Proxy Protocol header
-     */
-    s->haproxyprotocol = enabled;
-    break;
   case CURLOPT_PROXY_SSL_VERIFYPEER:
     /*
      * Enable peer SSL verifying for proxy.
@@ -994,6 +988,16 @@ static CURLcode setopt_long_proxy(struct Curl_easy *data, CURLoption option,
     if(arg & ~(CURLAUTH_BASIC | CURLAUTH_GSSAPI))
       return CURLE_NOT_BUILT_IN;
     s->socks5auth = (unsigned char)arg;
+    break;
+  case CURLOPT_HAPROXYPROTOCOL:
+    /*
+     * Set which version of the HAProxy PROXY protocol header to send:
+     * CURLHAPROXY_V1 or CURLHAPROXY_V2. Zero disables the header. The versions
+     * are mutually exclusive, so this is a single value and not a bitmask.
+     */
+    if((arg < 0) || (arg > CURLHAPROXY_V2))
+      return CURLE_BAD_FUNCTION_ARGUMENT;
+    s->haproxyprotocol = (unsigned char)arg;
     break;
   default:
     return CURLE_UNKNOWN_OPTION;
@@ -1739,8 +1743,26 @@ static CURLcode setopt_cptr_proxy(struct Curl_easy *data, CURLoption option,
      */
     result = Curl_setstropt(data, STRING_HAPROXY_CLIENT_IP, ptr);
 
-    /* enable the HAProxy protocol if an IP is provided */
-    s->haproxyprotocol = !!CURL_EASY_STR(data, STRING_HAPROXY_CLIENT_IP);
+    /* enable the HAProxy protocol if an IP is provided; default to version 1
+       but keep an explicitly selected version (e.g. v2) intact */
+    if(CURL_EASY_STR(data, STRING_HAPROXY_CLIENT_IP)) {
+      if(!s->haproxyprotocol)
+        s->haproxyprotocol = CURLHAPROXY_V1;
+    }
+    else
+      s->haproxyprotocol = 0;
+    break;
+  case CURLOPT_HAPROXY_CLIENT_PATH:
+    /*
+     * Set the UNIX socket path to send as the client address through the
+     * HAProxy PROXY protocol. This is carried in the AF_UNIX address family
+     * which only exists in version 2, so it enables version 2.
+     */
+    result = Curl_setstropt(data, STRING_HAPROXY_CLIENT_PATH, ptr);
+
+    /* the AF_UNIX address family only exists in the version 2 header */
+    if(CURL_EASY_STR(data, STRING_HAPROXY_CLIENT_PATH))
+      s->haproxyprotocol = CURLHAPROXY_V2;
     break;
   case CURLOPT_PROXY_CAINFO:
     /*

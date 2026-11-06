@@ -405,6 +405,11 @@ Send an HAProxy PROXY protocol v1 header. See CURLOPT_HAPROXYPROTOCOL(3)
 Spoof the client IP in an HAProxy PROXY protocol v1 header. See
 CURLOPT_HAPROXY_CLIENT_IP(3)
 
+## CURLOPT_HAPROXY_CLIENT_PATH
+
+Spoof the client UNIX socket path in an HAProxy PROXY protocol v2 header. See
+CURLOPT_HAPROXY_CLIENT_PATH(3)
+
 ## CURLOPT_HEADER
 
 Include the header in the body output. See CURLOPT_HEADER(3)

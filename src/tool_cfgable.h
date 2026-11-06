@@ -152,6 +152,8 @@ struct OperationConfig {
   char *oauth_bearer;             /* OAuth 2.0 bearer token */
   char *unix_socket_path;         /* path to Unix domain socket */
   char *haproxy_clientip;         /* client IP for HAProxy protocol */
+  char *haproxy_clientpath;       /* client UNIX socket path for HAProxy
+                                     protocol v2 (AF_UNIX) */
   char *aws_sigv4;
   char *httpsig_algorithm;
   char *httpsig_headers;
@@ -306,6 +308,7 @@ struct OperationConfig {
   BIT(synthetic_error);           /* if TRUE, this is tool-internal error */
   BIT(ssh_compression);           /* enable/disable SSH compression */
   BIT(haproxy_protocol);          /* whether to send HAProxy protocol v1 */
+  BIT(haproxy_protocol_v2);       /* whether to send HAProxy protocol v2 */
   BIT(disallow_username_in_url);  /* disallow usernames in URLs */
   BIT(mptcp);                     /* enable MPTCP support */
   BIT(rm_partial);                /* on error, remove partially written output

@@ -156,7 +156,9 @@ static const struct LongShort aliases[] = {
   {"globoff",                    ARG_BOOL, 'g', C_GLOBOFF},
   {"happy-eyeballs-timeout-ms",  ARG_UNUM, ' ', C_HAPPY_EYEBALLS_TIMEOUT_MS},
   {"haproxy-clientip",           ARG_STRG, ' ', C_HAPROXY_CLIENTIP},
+  {"haproxy-clientpath",         ARG_STRG, ' ', C_HAPROXY_CLIENTPATH},
   {"haproxy-protocol",           ARG_BOOL, ' ', C_HAPROXY_PROTOCOL},
+  {"haproxy-protocol-v2",        ARG_BOOL, ' ', C_HAPROXY_PROTOCOL_V2},
   {"head",                       ARG_BOOL, 'I', C_HEAD},
   {"header",                     ARG_STRG, 'H', C_HEADER},
   {"help",                       ARG_STRG, 'h', C_HELP},
@@ -1878,6 +1880,9 @@ static ParameterError opt_bool(struct OperationConfig *config,
   case C_HAPROXY_PROTOCOL: /* --haproxy-protocol */
     config->haproxy_protocol = toggle;
     break;
+  case C_HAPROXY_PROTOCOL_V2: /* --haproxy-protocol-v2 */
+    config->haproxy_protocol_v2 = toggle;
+    break;
   case C_NEGOTIATE: /* --negotiate */
     if(!feature_spnego && toggle)
       return PARAM_LIBCURL_DOESNT_SUPPORT;
@@ -2594,6 +2599,9 @@ static ParameterError opt_string(struct OperationConfig *config,
     break;
   case C_HAPROXY_CLIENTIP: /* --haproxy-clientip */
     err = getstr(&config->haproxy_clientip, nextarg, DENY_BLANK);
+    break;
+  case C_HAPROXY_CLIENTPATH: /* --haproxy-clientpath */
+    err = getstr(&config->haproxy_clientpath, nextarg, DENY_BLANK);
     break;
   case C_MAX_FILESIZE: /* --max-filesize */
     err = GetSizeParameter(nextarg, &value);

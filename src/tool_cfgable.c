@@ -66,6 +66,7 @@ static void free_config_fields(struct OperationConfig *config)
   curlx_safefree(config->altsvc);
   curlx_safefree(config->hsts);
   curlx_safefree(config->haproxy_clientip);
+  curlx_safefree(config->haproxy_clientpath);
   curl_slist_free_all(config->cookies);
   curlx_safefree(config->cookiejar);
   curl_slist_free_all(config->cookiefiles);

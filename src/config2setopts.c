@@ -875,11 +875,17 @@ static CURLcode proxy_setopts(struct OperationConfig *config, CURL *curl)
     MY_SETOPT_STR(curl, CURLOPT_PROXY_SERVICE_NAME,
                   config->proxy_service_name);
 
-  if(config->haproxy_protocol)
-    my_setopt_long(curl, CURLOPT_HAPROXYPROTOCOL, 1);
+  if(config->haproxy_protocol || config->haproxy_protocol_v2)
+    my_setopt_long(curl, CURLOPT_HAPROXYPROTOCOL,
+                   config->haproxy_protocol_v2 ?
+                   CURLHAPROXY_V2 : CURLHAPROXY_V1);
 
   if(config->haproxy_clientip)
     MY_SETOPT_STR(curl, CURLOPT_HAPROXY_CLIENT_IP, config->haproxy_clientip);
+
+  if(config->haproxy_clientpath)
+    MY_SETOPT_STR(curl, CURLOPT_HAPROXY_CLIENT_PATH,
+                  config->haproxy_clientpath);
 
   MY_SETOPT_STR(curl, CURLOPT_PROXY_KEYPASSWD, config->proxy_key_passwd);
 

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="US-ASCII"?>
+<testcase>
+<info>
+<keywords>
+HTTP
+HTTP GET
+proxy
+haproxy
+IPv6
+</keywords>
+</info>
+
+# Server-side
+<reply>
+<data nocheck="yes">
+HTTP/1.1 200 OK
+Date: Tue, 09 Nov 2010 14:49:00 GMT
+Server: test-server/fake
+Content-Length: 6
+Connection: close
+Content-Type: text/html
+
+-foo-
+</data>
+</reply>
+
+# Client-side
+<client>
+<features>
+IPv6
+</features>
+<server>
+http-ipv6
+</server>
+<name>
+HTTP-IPv6 GET with PROXY protocol v2 (binary header, TCP over IPv6)
+</name>
+<command>
+-g "http://%HOST6IP:%HTTP6PORT/%TESTNUMBER" --haproxy-protocol-v2
+</command>
+<features>
+proxy
+</features>
+</client>
+
+# Verify data after the test has been "shot"
+#
+# Over IPv6 the v2 header uses the AF_INET6 family, which makes the address
+# block 36 bytes: two 16 byte addresses followed by the two ports. The source
+# port is random, so it is only checked for being set at all.
+<verify>
+<postcheck>
+%PERL %SRCDIR/test3234.pl %LOGDIR/server.input tcp6 src=::1 dst=::1 sport=nonzero dport=%HTTP6PORT req=%TESTNUMBER
+</postcheck>
+</verify>
+</testcase>

@@ -803,6 +803,7 @@ enum dupstring {
 #endif
 #ifndef CURL_DISABLE_PROXY
   STRING_HAPROXY_CLIENT_IP,     /* CURLOPT_HAPROXY_CLIENT_IP */
+  STRING_HAPROXY_CLIENT_PATH,   /* CURLOPT_HAPROXY_CLIENT_PATH */
 #endif
   STRING_ECH_CONFIG,            /* CURLOPT_ECH_CONFIG */
   STRING_ECH_PUBLIC,            /* CURLOPT_ECH_PUBLIC */
@@ -1116,8 +1117,9 @@ struct UserDefined {
                                     from user callbacks */
   BIT(dns_shuffle_addresses); /* whether to shuffle addresses before use */
 #ifndef CURL_DISABLE_PROXY
-  BIT(haproxyprotocol); /* whether to send HAProxy PROXY protocol v1
-                           header */
+  unsigned char haproxyprotocol; /* which HAProxy PROXY protocol version to
+                                    send: CURLHAPROXY_V1 or CURLHAPROXY_V2,
+                                    0 means disabled */
 #endif
 #ifdef USE_UNIX_SOCKETS
   BIT(abstract_unix_socket);
